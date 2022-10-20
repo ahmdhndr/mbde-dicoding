@@ -53,3 +53,59 @@ Custom error yang akan dibuat adalah **ClientError**, **InvariantError**, **Auth
   * **InvariantError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena kesalahan bisnis logic pada data yang dikirimkan oleh client. Kesalahan validasi data merupakan salah satu InvariantError.
   * **AuthenticationError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena masalah autentikasi. Contohnya password yang diberikan salah dan refresh token yang diberikan tidak valid.
   * **NotFoundError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena resource yang diminta client tidak ditemukan.
+
+## Membangun Fitur Registrasi Pengguna
+Mari kita mulai dengan membangun fitur registrasi pengguna. Dengan fitur ini, client diharapkan dapat mendaftarkan entitas sebagai pengguna. Melalui registrasi, pengguna akan mengirimkan kredensial yang ia miliki untuk digunakan pada proses autentikasi nantinya. Oke, bagaimana spesifikasi untuk fitur kali ini?
+
+Berikut adalah acceptance scenario-nya:
+```gherkin
+Fitur: Registrasi Pengguna
+Sebagai seorang pengguna, saya ingin mendaftarkan diri sebagai entitas untuk proses autentikasi.
+ 
+Payload:
+ - username (string)
+ - password (string)
+ - fullname (string)
+ 
+Spesifikasi:
+ - Ketika mendaftar tanpa memberikan entitas yang dibutuhkan:
+   - maka error
+ - Ketika mendaftar dengan memberikan entitas yang tipe datanya tidak sesuai: 
+   - maka error
+ - Ketika mendaftar dengan username lebih dari 50 karakter:
+   - maka error
+ - Ketika mendaftar dengan username yang mengandung karakter terlarang:
+   - maka error 
+ - Ketika mendaftar dengan username yang sudah digunakan:
+   - maka error
+ - Ketika mendaftar dengan payload yang benar
+   - maka user baru harus terbuat
+ 
+Catatan sisi sistem:
+ - Enkripsi password user
+ - Simpan user baru pada database
+ - Kembalikan permintaan pengguna dengan nilai user yang dimasukkan
+```
+
+### Membuat User Domain
+Kita mulai dengan membuat kebutuhan domain untuk fitur registrasi pengguna. Di dalam domain, kita akan membuat dua hal, yaitu **entitas** dan **UserRepository** abstrak/interface. Kita mulai dengan membuat entitas terlebih dahulu.
+
+#### Membuat Entities User Domain
+Seperti yang sudah kita ketahui, entitas merupakan sebuah objek yang memiliki set struktur data dan method. Kita membutuhkan entitas domain untuk memastikan data yang dibutuhkan dalam melakukan sebuah proses selalu terpenuhi dan sesuai.
+
+Pada fitur registrasi pengguna, kita akan membuat dua domain entitas yakni **RegisterUser** dan **RegisteredUser**. Entitas **RegisterUser** digunakan untuk menampung data yang hendak dimasukan ke database melalui repository, sedangkan **RegisteredUser** digunakan untuk menampung data yang dihasilkan oleh repository setelah memasukkan user baru.
+
+#### Membuat UserRepository Interface
+Kita ingin logika bisnis terbebas dari implementasi framework atau tools luar, tetapi bagaimana caranya suatu proses bisnis bersentuhan dengan database untuk menyimpan suatu data? Jawabannya adalah melalui interface.
+
+Interface merupakan teknik dalam mendefinisikan kemampuan (*behavior*) objek, tetapi tanpa sebuah implementasi yang nyata, kemampuan tersebut bersifat abstrak. Meskipun kemampuan objek bersifat abstrak, objek interface nyatanya cukup untuk digunakan dalam menentukan alur proses bisnis aplikasi (pada *use case*). Padahal untuk menjalankan proses bisnisnya, tentu kita butuh objek konkritnya.
+
+Jika Anda familiar dengan bahasa pemrograman Java, Kotlin, C#, atau bahasa pemrograman yang kental dengan paradigma OOP, tentunya Anda familiar dengan hadirnya Interface. JavaScript sendiri sebenarnya tidak mengenal interface, namun kita tetap bisa membuat konsep interface melalui teknik inheritance class.
+
+Dalam level domain users, kita perlu mendefinisikan interface **UserRepository**. Interface **UserRepository** nantinya akan digunakan oleh use case dalam menentukkan alur proses bisnis. Repository pada proyek kita berperan sebagai jembatan untuk memproses domain model terhadap agen eksternal, seperti database, queue, storage, dan sebagainya.
+
+**UserRepository** merupakan objek yang memiliki kumpulan fungsi, di mana fungsi tersebut digunakan untuk berinteraksi dengan database (agen eksternal) dalam cakupan domain users. Untuk membangun fitur registrasi pengguna, kita membutuhkan dua fungsi pada UserRepository, yakni **addUser** dan **verifyAvailableUsername**. **addUser** digunakan untuk menyimpan user baru ke database, sedangkan **verifyAvailableUsername** digunakan untuk memeriksa keunikan username baru dari database. 
+
+Perlu diingat kembali, kemampuan atau fungsi **UserRepository** di sini bersifat abstrak. Sehingga, kita tidak akan menulis cara menyimpan user baru ke database atau memverifikasi keunikan username dari database, tetapi cukup mendefinisikan fungsi-fungsinya saja. Supaya tidak ada yang menggunakan fungsi langsung dari objek abstrak ini, maka kita buat fungsinya membangkitkan error.
+
+Kita mulai dari pengujian. Karena kita membuat objek UserRepository abstrak, ujilah objek tersebut untuk memastikan *behavior*-nya bersifat abstrak dengan mengembalikan sebuah error.
