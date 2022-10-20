@@ -47,3 +47,9 @@ auth-api/                   => Root Proyek.
 |- .env                     => Environment variable.
 |- package.json             => Project Manifest.
 ```
+## Membuat Custom Error
+Custom error yang akan dibuat adalah **ClientError**, **InvariantError**, **AuthenticationError**, dan **NotFoundError**. Berikut penjelasannya:
+  * **ClientError** (extends dari Error) : Custom error yang mengindikasikan eror karena masalah yang terjadi pada client. ClientError ini bersifat abstrak karena client error bisa lebih spesifik. Sebaiknya Anda tidak membangkitkan error menggunakan class ini secara langsung, gunakan turunannya saja.
+  * **InvariantError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena kesalahan bisnis logic pada data yang dikirimkan oleh client. Kesalahan validasi data merupakan salah satu InvariantError.
+  * **AuthenticationError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena masalah autentikasi. Contohnya password yang diberikan salah dan refresh token yang diberikan tidak valid.
+  * **NotFoundError** (extends dari ClientError) : Custom error yang mengindikasikan eror karena resource yang diminta client tidak ditemukan.
