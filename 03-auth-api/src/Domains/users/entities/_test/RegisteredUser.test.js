@@ -5,7 +5,7 @@ describe('A RegisteredUser entities', () => {
     // Arrange
     const payload = {
       username: 'erudev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
     };
 
     // Action and Assert
@@ -17,7 +17,7 @@ describe('A RegisteredUser entities', () => {
     const payload = {
       id: 123,
       username: 'erudev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
     };
 
     // Action and Assert
@@ -29,7 +29,7 @@ describe('A RegisteredUser entities', () => {
     const payload = {
       id: 'user-123',
       username: 'erudev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
     };
 
     // Action

@@ -28,7 +28,7 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'erudeverudeverudeverudeverudeverudeverudeverudeverudeverudeverudeverudev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
       password: 'abc',
     };
 
@@ -40,7 +40,7 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'eru dev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
       password: 'abc',
     };
 
@@ -52,7 +52,7 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'erudev',
-      fullname: 'Eru Devian',
+      fullname: 'Eru Desu',
       password: 'abc',
     };
 
