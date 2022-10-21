@@ -392,3 +392,152 @@ Jangan khawatir bila Anda belum mengerti bagaimana menuliskan konfigurasi untuk 
 Selain instances-container, Anda juga bisa menggunakan package lain dalam menerapkan service locator seperti:
   * [Awilix](https://github.com/jeffijoe/awilix)
   * [Bottlejs](https://github.com/young-steveo/bottlejs)
+
+#### Membuat HTTP Server dan Functional Test
+Kita berada di tahap akhir dalam pembuatan fitur registrasi pengguna. Seluruh kebutuhan untuk menangani fitur ini sudah hampir selesai. Tersisa pembuatan HTTP server yang nantinya akan dijalankan oleh aplikasi kita agar pengguna bisa mengirim permintaan dan kita bisa menanggapinya.
+
+Pada tahap ini kita juga melakukan functional test, yakni menguji seluruh fungsionalitas aplikasi dari hulu ke hilir. Kita ingin memastikan seluruh kode yang sudah dibuat berjalan dengan benar. Ayo kita mulai!
+
+Di sini kita akan membuat HTTP server dan pengujiannya terlebih dahulu. Silakan buat berkas JavaScript baru bernama **createServer.js** pada *Infrastructures/http* dan **createServer.test.js** pada *Infrastructures/http/_test*.
+
+Kita mulai dari skenario pengujian inti dari fitur ini, yaitu “mendaftar user baru dengan benar”. Dari skenario tersebut kita ingin melihat apakah kode yang sudah dibuat bekerja dengan benar.
+
+```js:createServer.test.js
+const pool = require('../../database/postgres/pool');
+const UsersTableTestHelper = require('../../../../tests/UsersTableTestHelper');
+const container = require('../../container');
+const createServer = require('../createServer');
+ 
+describe('HTTP server', () => {
+  afterAll(async () => {
+    await pool.end();
+  });
+ 
+  afterEach(async () => {
+    await UsersTableTestHelper.cleanTable();
+  });
+ 
+  describe('when POST /users', () => {
+    it('should response 201 and persisted user', async () => {
+      // Arrange
+      const requestPayload = {
+        username: 'erudev',
+        password: 'secret',
+        fullname: 'Eru Desu',
+      };
+      const server = await createServer(container);
+ 
+      // Action
+      const response = await server.inject({
+        method: 'POST',
+        url: '/users',
+        payload: requestPayload,
+      });
+ 
+      // Assert
+      const responseJson = JSON.parse(response.payload);
+      expect(response.statusCode).toEqual(201);
+      expect(responseJson.status).toEqual('success');
+      expect(responseJson.data.addedUser).toBeDefined();
+    });
+  });
+});
+```
+
+Kode di atas menguji request **POST /users** dengan payload yang benar. Ia seharusnya mengembalikan response 201 dan membawa data user yang telah dimasukkan.
+
+Selanjutnya kita akan membuatnya menjadi hijau dengan menyiapkan HTTP server. Namun, sebelum membuat HTTP server, alangkah baiknya kita siapkan routes dan handler terlebih dahulu. Karena Anda sudah familier dengan Hapi plugin, kita akan membungkus routes dan handler tersebut dalam bentuk Hapi plugin.
+
+Silakan buat berkas **index.js**, **routes.js**, dan **handler.js** pada *Interfaces/http/api/users*.
+
+Kita mulai dari routes. Silakan buka berkas **routes.js** dan tulis route konfigurasi berikut:
+
+```js
+const routes = (handler) => ([
+  {
+    method: 'POST',
+    path: '/users',
+    handler: handler.postUserHandler,
+  },
+]);
+ 
+module.exports = routes;
+```
+
+Simpan berkas **routes.js** dan selanjutnya kita tulis kode handlernya.
+
+Silakan buka berkas **handler.js** dan tuliskan kode berikut:
+```js
+const AddUserUseCase = require('../../../../Applications/use_case/AddUserUseCase');
+ 
+class UsersHandler {
+  constructor(container) {
+    this._container = container;
+ 
+    this.postUserHandler = this.postUserHandler.bind(this);
+  }
+ 
+  async postUserHandler(request, h) {
+    const addUserUseCase = this._container.getInstance(AddUserUseCase.name);
+    const addedUser = await addUserUseCase.execute(request.payload);
+ 
+    const response = h.response({
+      status: 'success',
+      data: {
+        addedUser,
+      },
+    });
+    response.code(201);
+    return response;
+  }
+}
+ 
+module.exports = UsersHandler;
+```
+Fungsi handler (`postUserHandler`) dalam kode tersebut tidak ada lagi logika yang dituliskan selain untuk merespons permintaan karena semua logic akan ditangani oleh use case. Handler memanggil fungsi `execute` dari use case dan memberikan `request.payload` sebagai payload use case. Handler memiliki akses terhadap instance use case melalui `container` yang akan dikirim oleh HTTP server melalui plugin `options`. Perhatikan juga bahwa untuk mendapatkan instance dari container, kita menggunakan fungsi `getInstance(key)`.
+
+Simpan berkas **handler.js**. Kemudian kita lanjut untuk membuat plugin `users`.
+
+Silakan buka berkas **index.js** dan tulis kode untuk membuat plugin `users` sebagai berikut:
+
+```js
+const UsersHandler = require('./handler');
+const routes = require('./routes');
+ 
+module.exports = {
+  name: 'users',
+  register: async (server, { container }) => {
+    const usersHandler = new UsersHandler(container);
+    server.route(routes(usersHandler));
+  },
+};
+```
+
+Simpan berkas index.js dan kebutuhan plugin `users` selesai. Sekarang kita lanjut membuat HTTP server melalui fungsi `createServer` dan mendaftarkan plugin users.
+
+Silakan buka berkas **createServer.js** dan tulis kode berikut:
+
+```js
+const Hapi = require('@hapi/hapi');
+const users = require('../../Interfaces/http/api/users');
+ 
+const createServer = async (container) => {
+  const server = Hapi.server({
+    host: process.env.HOST,
+    port: process.env.PORT,
+  });
+ 
+  await server.register([
+    {
+      plugin: users,
+      options: { container },
+    },
+  ]);
+ 
+  return server;
+};
+ 
+module.exports = createServer;
+```
+
+Karena kita memanfaatkan environment variable dalam menetapkan nilai host dan port server, jangan lupa tambahkan nilainya pada berkas .env.

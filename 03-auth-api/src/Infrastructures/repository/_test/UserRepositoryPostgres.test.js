@@ -41,7 +41,7 @@ describe('UserRepositoryPostgres', () => {
         password: 'secret',
         fullname: 'Eru Desu',
       });
-      const fakeIDGenerator = '123'; // stub
+      const fakeIDGenerator = () => '123'; // stub
       const userRepositoryPostgres = new UserRepositoryPostgres(pool, fakeIDGenerator);
 
       // Action
@@ -59,7 +59,7 @@ describe('UserRepositoryPostgres', () => {
         password: 'secret',
         fullname: 'Eru Desu',
       });
-      const fakeIDGenerator = '123'; // stub
+      const fakeIDGenerator = () => '123'; // stub
       const userRepositoryPostgres = new UserRepositoryPostgres(pool, fakeIDGenerator);
 
       // Action
