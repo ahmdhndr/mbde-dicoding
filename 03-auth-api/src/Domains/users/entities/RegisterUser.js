@@ -5,8 +5,8 @@ class RegisterUser {
     const { username, password, fullname } = payload;
 
     this.username = username;
-    this.fullname = fullname;
     this.password = password;
+    this.fullname = fullname;
   }
 
   _verifyPayload({ username, fullname, password }) {
@@ -16,8 +16,8 @@ class RegisterUser {
 
     if (
       typeof username !== 'string'
-      || typeof fullname !== 'string'
       || typeof password !== 'string'
+      || typeof fullname !== 'string'
     ) {
       throw new Error('REGISTER_USER.NOT_MEET_DATA_TYPE_SPECIFICATION');
     }

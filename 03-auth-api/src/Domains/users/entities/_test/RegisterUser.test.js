@@ -16,8 +16,8 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 123,
-      fullname: [],
       password: 'abc',
+      fullname: [],
     };
 
     // Action and Assert
@@ -28,8 +28,8 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'erudeverudeverudeverudeverudeverudeverudeverudeverudeverudeverudeverudev',
-      fullname: 'Eru Desu',
       password: 'abc',
+      fullname: 'Eru Desu',
     };
 
     // Action and Assert
@@ -40,8 +40,8 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'eru dev',
-      fullname: 'Eru Desu',
       password: 'abc',
+      fullname: 'Eru Desu',
     };
 
     // Action and Assert
@@ -52,16 +52,16 @@ describe('A RegisterUser entities', () => {
     // Arrange
     const payload = {
       username: 'erudev',
-      fullname: 'Eru Desu',
       password: 'abc',
+      fullname: 'Eru Desu',
     };
 
     // Action
-    const { username, fullname, password } = new RegisterUser(payload);
+    const { username, password, fullname } = new RegisterUser(payload);
 
     // Assert
     expect(username).toEqual(payload.username);
-    expect(fullname).toEqual(payload.fullname);
     expect(password).toEqual(payload.password);
+    expect(fullname).toEqual(payload.fullname);
   });
 });
