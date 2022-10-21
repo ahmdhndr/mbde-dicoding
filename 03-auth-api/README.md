@@ -541,3 +541,266 @@ module.exports = createServer;
 ```
 
 Karena kita memanfaatkan environment variable dalam menetapkan nilai host dan port server, jangan lupa tambahkan nilainya pada berkas .env.
+
+#### Menerjemahkan Domain Error ke HTTP Error
+Hakikatnya, Auth API sudah berfungsi dengan baik sesuai harapan. Namun dengan catatan, client selalu memenuhi spesifikasi permintaan seperti memberikan payload request yang tepat. Kita belum mengetahui bagaimana jadinya jika client memberikan payload yang tidak sesuai, apakah server dapat menanganinya dengan baik?
+
+Pada domain, lebih tepatnya entities RegisterUser, kita telah menulis verifikasi payload yang diberikan, seperti mengecek kelengkapan properti, tipe data, dan spesifikasi username. Tentunya Anda masih ingat hal itu, bukan? 
+
+Lalu, jika verifikasinya gagal, apakah server dapat memberikan respon yang sesuai, misalnya seperti response code 400? Semuanya akan terjawab dalam latihan kali ini.
+
+Silakan tambahkan skenario baru pada **createServer.test.js** untuk menguji beberapa skenario negatif berikut:
+
+  * should response 400 when request payload not contain needed property.
+  * should response 400 when request payload not meet data type specification.
+  * should response 400 when username more than 50 character.
+  * should response 400 when username contain restricted character.
+  * should response 400 when username unavailable.
+
+Simpan pengujiannya dan kini terdapat 5 pengujian yang gagal.
+
+Itu berarti server kita belum bisa menangani error dengan benar. Coba lihat salah satu hasil pengujian yang gagal.
+
+Salah satu contohnya adalah skenario *should response 400 when request payload not contain needed property*. Ketika payload tidak memiliki properti yang dibutuhkan untuk membuat user baru, pembuatan entities ``RegisterUser`` akan membangkitkan error. Error yang dibangkitkan tidak ditangani oleh server sehingga menyebabkan response 500.
+
+Masalahnya, eror yang dibangkitkan oleh domain model `RegisterUser` adalah generic error. Ia tidak memiliki status code yang digunakan sebagai nilai response code. Lalu, bagaimana cara server dapat menangani eror tersebut dengan benar? Tidak ada cara lagi selain menerjemahkan domain eror menjadi HTTP error.
+
+Ingat! Tidak semua eror yang ada di Domains dan Applications perlu diterjemahkan. Salah satu eror yang dapat diterjemahkan adalah yang disebabkan oleh kesalahan client. Contohnya, eror yang dibangkitkan pada proses verifikasi payload `RegisterUser`. Sementara itu, error seperti abstrak method yang belum diimplementasi tidak perlu diterjemahkan karena eror tersebut ditujukan untuk pengembang aplikasi (developer).
+
+Bagaimana cara menerjemahkannya? Kita dapat memetakan secara manual setiap domain eror yang memang perlu diterjemahkan. Setiap eror yang dibangkitkan pada folder Domains dan Applications selalu memberikan format pesan yang jelas. Pesan tersebut akan kita manfaatkan sebagai kunci dalam menerjemahkan domain eror menjadi HTTP Error.
+
+Oleh karena itu, mari kita buat penerjemah error tersebut dengan nama DomainErrorTranslator. 
+
+Silakan buat berkas JavaScript baru bernama **DomainErrorTranslator.js** pada *Commons/exceptions/* dan **DomainErrorTranslator.test.js** pada *Commons/exceptions/_test/*.
+
+Proses translate dilakukan oleh fungsi `DomainErrorTranslator.translate`. Di sana kita menguji apakah fungsi tersebut mampu menerjemahkan eror yang dihasilkan oleh domain. Ingat! Tidak seluruh eror harus diterjemahkan. Untuk saat ini, cukup terjemahkan eror yang dibangkitkan ketika proses verifikasi payload pembuatan RegisterUser.
+
+Simpan perubahan kode pengujian. Sehingga akan ada 7 pengujian yang merah.
+
+Selanjutnya mari kita ubah pengujian `DomainErrorTranslator` menjadi hijau dengan menulis kode berikut:
+
+```js
+const InvariantError = require('./InvariantError');
+ 
+const DomainErrorTranslator = {
+  translate(error) {
+    switch (error.message) {
+      case 'REGISTER_USER.NOT_CONTAIN_NEEDED_PROPERTY':
+        return new InvariantError('tidak dapat membuat user baru karena properti yang dibutuhkan tidak ada');
+      case 'REGISTER_USER.NOT_MEET_DATA_TYPE_SPECIFICATION':
+        return new InvariantError('tidak dapat membuat user baru karena tipe data tidak sesuai');
+      case 'REGISTER_USER.USERNAME_LIMIT_CHAR':
+        return new InvariantError('tidak dapat membuat user baru karena karakter username melebihi batas limit');
+      case 'REGISTER_USER.USERNAME_CONTAIN_RESTRICTED_CHARACTER':
+        return new InvariantError('tidak dapat membuat user baru karena username mengandung karakter terlarang');
+      default:
+        return error;
+    }
+  },
+};
+ 
+module.exports = DomainErrorTranslator;
+```
+
+Simpan perubahan kode tersebut. Setelah itu, pengujian `DomainErrorTranslator` menjadi hijau dan pengujian yang merah kembali menjadi 5.
+
+Apakah butuh refactor? Tentu saja kita memerlukannya karena secara personal, penulis tidak menyukai penggunaan switch case sebanyak itu. Kodenya terkesan berantakan dan sulit dibaca dan dikelola. Ada cara yang lebih efektif yakni dengan memanfaatkan error message sebagai properti objek seperti berikut:
+
+```js
+const InvariantError = require('./InvariantError');
+ 
+const DomainErrorTranslator = {
+  translate(error) {
+    return DomainErrorTranslator._directories[error.message] || error;
+  },
+};
+ 
+DomainErrorTranslator._directories = {
+  'REGISTER_USER.NOT_CONTAIN_NEEDED_PROPERTY': new InvariantError('tidak dapat membuat user baru karena properti yang dibutuhkan tidak ada'),
+  'REGISTER_USER.NOT_MEET_DATA_TYPE_SPECIFICATION': new InvariantError('tidak dapat membuat user baru karena tipe data tidak sesuai'),
+  'REGISTER_USER.USERNAME_LIMIT_CHAR': new InvariantError('tidak dapat membuat user baru karena karakter username melebihi batas limit'),
+  'REGISTER_USER.USERNAME_CONTAIN_RESTRICTED_CHARACTER': new InvariantError('tidak dapat membuat user baru karena username mengandung karakter terlarang'),
+};
+ 
+module.exports = DomainErrorTranslator;
+```
+
+Simpan perubahan kode dan pengujian untuk `DomainErrorTranslator` tetap hijau kan? Kode yang dituliskan menjadi lebih singkat, serta mudah dibaca dan dikelola.
+
+Oke. Translator sudah selesai. Saatnya kita menggunakan translator tersebut untuk menangani eror pada server.
+
+Silakan buka kembali berkas **handler.js** pada users plugin. Bungkus kode di dalam fungsi handler dengan *try catch*. Kemudian dalam blok catch, manfaatkan `DomainErrorTranslator` untuk penanganan errornya.
+
+Sekarang HTTP server sudah mampu menangani client error dengan baik. Lalu, bagaimana dengan penanganan server error? Apakah server mampu menanganinya sesuai dengan yang diharapkan? Mari kita coba dalam uraian di bawah ini.
+
+Tambahkan pengujian baru pada **createServer.test.js** dengan skenario membangkitkan server error. Untuk membangkitkannya, berikan saja `container` palsu pada pembuatan server.
+
+Simpan perubahan kode testing createServer.test.js. Sehingga, pengujiannya akan kembali merah.
+
+Bila kita lihat detail hasil pengujiannya akan tampak pesan seperti berikut:
+
+```bash
+Error: Status code must be an integer
+```
+
+Pesan di atas muncul disebabkan oleh penanganan error yang kita buat kurang tepat. Penanganan error tersebut hanya aman untuk `ClientError`, tetapi tidak untuk eror secara general. Hal tersebut terjadi karena ia tidak memiliki properti `statusCode` yang digunakan sebagai nilai response code pada handler.
+
+Oleh karena itu, mari kita perbaiki dan sesuaikan response ketika terjadi server error. Silakan buka kembali berkas **handler.js** pada users plugin dan ubah penanganan error menjadi seperti ini:
+
+```js
+// kode lain disembunyikan...
+  async postUserHandler(request, h) {
+    try {
+      // kode lain disembunyikan...
+    } catch(error) {
+      const translatedError = DomainErrorTranslator.translate(error);
+      if (translatedError instanceof ClientError) {
+        const response = h.response({
+          status: 'fail',
+          message: translatedError.message,
+        });
+        response.code(translatedError.statusCode);
+        return response;
+      }
+      const response = h.response({
+        status: 'error',
+        message: 'terjadi kegagalan pada server kami',
+      });
+      response.code(500);
+      return response;
+    }
+  }
+```
+
+Simpan perubahan kode dan pengujiannya akan kembali hijau.
+
+Selesai sudah perjalanan kita dalam membangun fitur registrasi pengguna. Tinggal selangkah lagi yakni menjalankan HTTP server pada app.js agar fitur tersebut dapat digunakan melalui permintaan HTTP. 
+
+Namun sebelum itu, kita akan melakukan sedikit refactor pada penanganan error. Kita akan memindahkan penanganan error pada cakupan server agar kode handler bisa fokus pada penggunaan use case tanpa adanya penanganan error di sana.
+
+Caranya, kita akan menggunakan teknik [extensions function](https://hapi.dev/api/?v=20.1.4#-serverextevents) ketika siklus `onPreResponse` pada server Hapi. Fungsi extensions ini akan terpanggil sebelum server Hapi merespon sebuah permintaan. Dalam fungsi extension ini, kita bisa mengubah respons sebelum ia dikirim ke client. Dengan begitu, kita bisa mengintervensi response--khususnya response error--dengan penanganan eror sesuai kebutuhan.
+
+Silakan buka berkas **createServer.js** dan tulis kode extensions function untuk siklus `onPreResponse` tepat sebelum mengembalikan nilai `server`.
+```js
+const ClientError = require('../../Commons/exceptions/ClientError');
+const DomainErrorTranslator = require('../../Commons/exceptions/DomainErrorTranslator');
+
+// kode lain disembunyikan...
+
+  server.ext('onPreResponse', (request, h) => {
+    // mendapatkan konteks response dari request
+    const { response } = request;
+
+    if (response instanceof Error) {
+      // bila response tersebut error, tangani sesuai kebutuhan
+      const translatedError = DomainErrorTranslator.translate(response);
+
+      // penanganan client error secara internal.
+      if (translatedError instanceof ClientError) {
+        const newResponse = h.response({
+          status: 'fail',
+          message: translatedError.message,
+        });
+        newResponse.code(translatedError.statusCode);
+        return newResponse;
+      }
+
+      // penanganan server error sesuai kebutuhan
+      const newResponse = h.response({
+        status: 'error',
+        message: 'terjadi kegagalan pada server kami',
+      });
+      newResponse.code(500);
+      return newResponse;
+    }
+
+    // jika bukan error, lanjutkan dengan response sebelumnya (tanpa terintervensi)
+    return h.continue;
+  });
+
+  return server;
+```
+
+Kemudian pada fungsi handler, hapus kode penanganan error.
+
+Silakan simpan seluruh perubahan dan pastikan pengujiannya tetap hijau.
+
+Hal lain yang perlu kita perhatikan adalah Hapi framework secara native memiliki penanganan erornya sendiri. Misalnya, ketika mengakses endpoint yang tidak terdaftar, secara native Hapi akan mengembalikan 404 eror. Kita perlu memastikan juga bahwa intervensi response yang kita lakukan tidak merusak behavior tersebut. Oke, mari kita pastikan dengan langkah-langkah di bawah ini.
+
+Hal lain yang perlu kita perhatikan adalah Hapi framework secara native memiliki penanganan erornya sendiri. Misalnya, ketika mengakses endpoint yang tidak terdaftar, secara native Hapi akan mengembalikan 404 eror. Kita perlu memastikan juga bahwa intervensi response yang kita lakukan tidak merusak behavior tersebut. Oke, mari kita pastikan dengan langkah-langkah di bawah ini.
+
+Silakan tambah skenario pengujian ‘*should response 404 when request unregistered route*’ pada createServer.test.js:
+```js
+// kode lain disembunyikan...
+
+describe('HTTP server', () => {
+  // kode lain disembunyikan..
+
+  it('should response 404 when request unregistered route', async () => {
+    // Arrange
+    const server = await createServer({});
+    // Action
+    const response = await server.inject({
+      method: 'GET',
+      url: '/unregisteredRoute',
+    });
+    // Assert
+    expect(response.statusCode).toEqual(404);
+  });
+  
+  describe('when POST /users', () => {
+    // kode disembunyikan...
+  });
+});
+```
+
+Simpan kode testing dan hasil pengujiannya menjadi merah.
+
+Wah ternyata behaviornya rusak. Karena kita telah menyadari hal ini, buat pengujiannya kembali hijau dengan menambahkan kode berikut pada extensions function.
+
+```js
+// kode lain disembunyikan...
+
+  server.ext('onPreResponse', (request, h) => {
+    // mendapatkan konteks response dari request
+    const { response } = request;
+
+    if (response instanceof Error) {
+      // bila response tersebut error, tangani sesuai kebutuhan
+      const translatedError = DomainErrorTranslator.translate(response);
+
+      // penanganan client error secara internal.
+      if (translatedError instanceof ClientError) {
+        const newResponse = h.response({
+          status: 'fail',
+          message: translatedError.message,
+        });
+        newResponse.code(translatedError.statusCode);
+        return newResponse;
+      }
+
+      // mempertahankan penanganan client error oleh hapi secara native, seperti 404, etc.
+      if (!translatedError.isServer) {
+        return h.continue;
+      }
+
+      // penanganan server error sesuai kebutuhan
+      const newResponse = h.response({
+        status: 'error',
+        message: 'terjadi kegagalan pada server kami',
+      });
+      newResponse.code(500);
+      return newResponse;
+    }
+    // jika bukan error, lanjutkan dengan response sebelumnya (tanpa terintervensi)
+    return h.continue;
+  });
+
+  return server;
+```
+
+Ketika Hapi server hendak mengembalikan response yang merupakan eror, response tersebut memiliki properti isServer. Properti tersebut mengindikasikan apakah error merupakan client atau server. Jika eror tersebut merupakan client, kita bisa mengembalikan dengan response asli tanpa ada proses intervensi. Hal tersebut karena kita ingin mempertahankan behavior Hapi dalam menangani client error. Namun, jika erornya server, response akan terintervensi dengan penanganan server error yang kita tetapkan.
+
+Simpan perubahan kode dan pengujian akan kembali hijau.
+
+Selamat! Anda telah berhasil menerjemahkan Domain Error ke HTTP Error.
