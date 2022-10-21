@@ -283,3 +283,112 @@ describe('BcryptPasswordHash', () => {
 Mari kita bedah pengujiannya. Di sana, terdapat satu pengujian yang kita tuliskan.
   * *hash function should encrypt password correctly*
   Skenario ini menguji kebenaran dari fungsi hash dalam mengenkripsi password menggunakan bcrypt. Di sini, kita menggunakan teknik spy untuk melihat apakah fungsi hash dari bcrypt dipanggil dan diperlakukan dengan benar. Di sini juga kita memastikan nilai “plain_password” sudah terenkripsi.
+
+#### Membuat Service Locator
+Kita sudah selesai membuat `UserRepositoryPostgres` dan `BcryptPasswordHash`. Selain itu, kita juga sudah memastikan semua yang kita buat berkerja dengan baik dan sesuai melalui pengujian automatis. Selanjutnya, kita akan membuat HTTP server menggunakan repository, use case, dan helper yang sudah kita buat di sana. Tapi tunggu! Sebelum itu, ada hal penting yang perlu Anda ketahui dulu.
+
+**Dampak dari Penerapan Dependency Injection**
+gan pola dependency injection (DI)? Sejauh latihan yang sudah dilalui, kita banyak menerapkan pola dependency injection. Manfaat dari menerapkan pola ini adalah hubungan antar objek tidak saling terikat erat, dengan begitu kita dapat menciptakan arsitektur yang *clean* dan mudah menerapkan *test double* ketika pengujian. Kami yakin Anda sudah mengetahui dan merasakannya secara langsung.
+
+Salah satu dampak dari pola dependency injection adalah pembuatan instance dari class menjadi rumit, terutama bila ia memiliki dependency yang banyak. Karena, kita perlu menyiapkan seluruh objek yang dibutuhkan ketika membuat suatu class. Contoh, kita sudah membuat `AddUserUseCase` dan kita akan menggunakanya pada route handler nantinya. Pada handler, tentu kita perlu membuat instance dari `AddUserUseCase`. Sedangkan untuk membuat instance tersebut, kita butuh menyiapkan objek yang dibutuhkan, yaitu `UserRepository` dan `AuthenticationTokenManager`. Karena itu, pembuatan instance `AddUserUseCase` menjadi rumit dan mahal. Belum lagi bila `AddUserUseCase` digunakan di banyak handler. Kita perlu mengulang proses pembuatannya yang rumit.
+
+Tenang, setiap masalah pasti ada solusinya. Untuk dapat membuat dan menggunakan instance class yang menerapkan pola DI dengan mudah, kita perlu membuat objek khusus yang memang bertugas untuk mengatur seluruh instances atau services yang diperlukan oleh aplikasi. Objek tersebut dikenal sebagai [Service Locator](https://en.wikipedia.org/wiki/Service_locator_pattern).
+
+**Service Locator**
+Service locator merupakan objek yang berfungsi untuk mengabstraksikan pembuatan dan pengaksesan sebuah instance class. Sesuai namanya, ketika menggunakan service locator, kita bisa mendapatkan instance secara mudah karena ia berada di satu lokasi saja. Karena service locator menampung banyak instance di dalamnya, ia juga berfungsi sebagai service container. 
+
+Ketahuilah bahwa kita akan menggunakan teknik service locator untuk menyelesaikan masalah dependency injection. Namun, alih-alih kita membuatnya sendiri, kita akan menggunakan package [instances-container](https://github.com/dimasmds/instances-container/blob/master/README.id-ID.md) dalam membuat service locator atau container. Tujuannya untuk meringankan efort dan tentunya lebih optimal. 
+
+Silakan pasang package instances-container menggunakan perintah:
+```bash
+npm install instances-container
+```
+Setelah package berhasil dipasang, kemudian buat berkas JavaScript baru dengan nama container.js pada *Infrastructures*/.
+
+Kemudian di dalamnya tulis kode untuk membuat container dan daftarkan seluruh class *use case* dan *services* yang dibutuhkan oleh aplikasi:
+```js:container.js
+* istanbul ignore file */
+ 
+const { createContainer } = require('instances-container');
+ 
+// external agency
+const { nanoid } = require('nanoid');
+const bcrypt = require('bcrypt');
+const pool = require('./database/postgres/pool');
+ 
+// service (repository, helper, manager, etc)
+const UserRepositoryPostgres = require('./repository/UserRepositoryPostgres');
+const BcryptPasswordHash = require('./security/BcryptPasswordHash');
+ 
+// use case
+const AddUserUseCase = require('../Applications/use_case/AddUserUseCase');
+const UserRepository = require('../Domains/users/UserRepository');
+const PasswordHash = require('../Applications/security/PasswordHash');
+ 
+// creating container
+const container = createContainer();
+ 
+// registering services and repository
+container.register([
+  {
+    key: UserRepository.name,
+    Class: UserRepositoryPostgres,
+    parameter: {
+      dependencies: [
+        {
+          concrete: pool,
+        },
+        {
+          concrete: nanoid,
+        },
+      ],
+    },
+  },
+  {
+    key: PasswordHash.name,
+    Class: BcryptPasswordHash,
+    parameter: {
+      dependencies: [
+        {
+          concrete: bcrypt,
+        },
+      ],
+    },
+  },
+]);
+ 
+// registering use cases
+container.register([
+  {
+    key: AddUserUseCase.name,
+    Class: AddUserUseCase,
+    parameter: {
+      injectType: 'destructuring',
+      dependencies: [
+        {
+          name: 'userRepository',
+          internal: UserRepository.name,
+        },
+        {
+          name: 'passwordHash',
+          internal: PasswordHash.name,
+        },
+      ],
+    },
+  },
+]);
+ 
+module.exports = container;
+```
+
+Objek container yang kita buat merupakan objek yang menampung seluruh instance dari class yang didaftarkan di dalamnya. Untuk mendapatkan instance di dalam container, nantinya kita akan menggunakan fungsi `container.getInstance(key)`. Key merupakan kata kunci dalam bentuk string yang digunakan untuk mendapatkan instance.
+
+Pada kode di atas, ketika mendaftarkan class, kita memberikan nilai `Class.name` (contohnya `UserRepository.name`) sebagai key. Hal itu bertujuan untuk menghindari kesalahan penulisan (typo).
+
+Jangan khawatir bila Anda belum mengerti bagaimana menuliskan konfigurasi untuk mendaftarkan class di package instance-container. Untuk mengetahuinya lebih lanjut, silakan baca [dokumentasi yang disedikan](https://github.com/dimasmds/instances-container/blob/master/README.id-ID.md). Di sana Anda akan mengetahui secara rinci penggunaan instances-container. Kontributor dari package menyediakan dokumentasi dalam Bahasa Indonesia yang harusnya mudah Anda pahami.
+
+> Kita tidak perlu menguji kode container.js. karena instances-container sudah teruji ketika mengembangkannya. Itulah sebabnya istanbul ignore files ditambahkan di awal kode.
+
+Selain instances-container, Anda juga bisa menggunakan package lain dalam menerapkan service locator seperti:
+  * [Awilix](https://github.com/jeffijoe/awilix)
+  * [Bottlejs](https://github.com/young-steveo/bottlejs)
