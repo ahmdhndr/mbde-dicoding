@@ -22,7 +22,7 @@ describe('HTTP Server', () => {
       password: 'secret_password',
       fullname: 'Eru Desu',
     };
-    const server = await createServer({}); // fake container
+    const server = await createServer({}); // fake injection
 
     // Action
     const response = await server.inject({
