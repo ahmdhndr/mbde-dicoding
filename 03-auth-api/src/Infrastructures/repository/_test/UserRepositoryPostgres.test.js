@@ -48,7 +48,7 @@ describe('UserRepositoryPostgres', () => {
       await userRepositoryPostgres.addUser(registerUser);
 
       // Assert
-      const users = await UsersTableTestHelper.findUsersById('user-123');
+      const users = await UsersTableTestHelper.findUserById('user-123');
       expect(users).toHaveLength(1);
     });
 

@@ -13,7 +13,7 @@ const UsersTableTestHelper = {
     await pool.query(query);
   },
 
-  async findUsersById(id) {
+  async findUserById(id) {
     const query = {
       text: 'SELECT * FROM USERS WHERE id = $1',
       values: [id],
@@ -24,7 +24,7 @@ const UsersTableTestHelper = {
   },
 
   async cleanTable() {
-    await pool.query('TRUNCATE TABLE users');
+    await pool.query('DELETE FROM users WHERE 1=1');
   },
 };
 
